@@ -180,6 +180,38 @@ app.get("/recordings/:id/audio-url", async (req, res) => {
   }
 });
 
+// Regenerar resumen de una grabacion usando la transcripcion ya guardada
+app.post("/recordings/:id/regenerate-summary", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT transcript FROM recordings WHERE recording_id = $1 LIMIT 1",
+      [req.params["id"]]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Grabacion no encontrada" });
+      return;
+    }
+    const transcript: string = result.rows[0]["transcript"];
+    if (!transcript?.trim()) {
+      res.status(400).json({ error: "Esta grabacion no tiene transcripcion guardada" });
+      return;
+    }
+
+    const { summarize } = await import("./processor");
+    const summary = await summarize(transcript);
+
+    await pool.query(
+      "UPDATE recordings SET summary = $1 WHERE recording_id = $2",
+      [summary, req.params["id"]]
+    );
+
+    res.json({ ok: true, summary });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ─── Estadisticas ─────────────────────────────────────────────────────────────
 
 app.get("/stats", async (_req, res) => {

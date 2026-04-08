@@ -11,27 +11,40 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   : null;
 
 // Plantilla de resumen — puedes personalizarla para tu industria
-const SUMMARY_PROMPT = `Eres un asistente especializado en resumir reuniones de trabajo con clientes.
+const SUMMARY_PROMPT = `Eres un analista experto en reuniones de negocios. Tu trabajo es producir resumenes densos, utiles y accionables — no parafrasis vagas.
 
-A continuacion tienes la transcripcion de una reunion. Genera un resumen estructurado en espanol con este formato exacto:
+Reglas:
+- Usa nombres reales de personas, empresas, sistemas y fechas que aparezcan en la transcripcion
+- Si alguien dijo algo importante, cita sus palabras entre comillas
+- Sé especifico: no escribas "se discutio el proceso" sino "Cristian propuso migrar los datos antes del 30 de junio porque ODU no soporta reportes consolidados"
+- Si hay tension, desacuerdo o problema sin resolver, mencionalos explicitamente
+- Los proximos pasos deben tener responsable y fecha si se mencionaron
+
+Genera el resumen en espanol con esta estructura:
 
 ## Resumen ejecutivo
-(2-3 oraciones con la idea principal de la reunion)
+(3-5 oraciones densas que capturen el QUE, POR QUE y resultado de la reunion)
 
-## Puntos clave discutidos
-- (lista de los temas mas importantes)
+## Contexto y antecedentes
+(que situacion o problema previo motivo esta reunion)
 
-## Acuerdos y compromisos
-- (lista de decisiones tomadas o compromisos adquiridos, con responsable si se menciona)
+## Temas discutidos en detalle
+(para cada tema importante: que se dijo, quien lo planteo, que posiciones hubo)
+
+## Decisiones tomadas
+- (decision concreta — responsable si se menciona)
+
+## Problemas o bloqueos identificados
+- (obstaculos, riesgos o puntos sin resolver)
 
 ## Proximos pasos
-- (lista de acciones a tomar, con fecha si se menciona)
+- (accion especifica — responsable — fecha si se menciona)
 
-## Participantes mencionados
-- (nombres de personas o empresas mencionadas)
+## Participantes
+- (nombres mencionados con su rol si se puede inferir)
 
-Si algun bloque no aplica para esta reunion, escribe "No aplica" en ese bloque.
-Se directo y conciso. No agregues comentarios fuera de la estructura.`;
+Si un bloque genuinamente no aplica, eliminalo. No escribas "No aplica".
+No agregues introducciones ni conclusiones fuera de la estructura.`;
 
 function downloadAudio(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -45,13 +58,13 @@ function downloadAudio(url: string): Promise<Buffer> {
   });
 }
 
-async function summarize(transcript: string): Promise<string> {
+export async function summarize(transcript: string): Promise<string> {
   // Preferencia: Claude si esta configurado, si no GPT-4o
   if (anthropic) {
     console.log(`  Resumiendo con Claude...`);
     const message = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL ?? "claude-opus-4-6",
-      max_tokens: 1024,
+      max_tokens: 4096,
       messages: [{ role: "user", content: `${SUMMARY_PROMPT}\n\n---TRANSCRIPCION---\n${transcript}` }],
     });
     return message.content
@@ -63,7 +76,7 @@ async function summarize(transcript: string): Promise<string> {
   console.log(`  Resumiendo con GPT-4o...`);
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    max_tokens: 1024,
+    max_tokens: 4096,
     messages: [
       { role: "system", content: SUMMARY_PROMPT },
       { role: "user", content: `---TRANSCRIPCION---\n${transcript}` },
