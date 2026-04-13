@@ -198,7 +198,7 @@ app.get("/recordings/:id/audio-url", async (req, res) => {
   }
 });
 
-// Regenerar resumen de una grabacion usando la transcripcion ya guardada
+// Regenerar resumen con skill/template opcional
 app.post("/recordings/:id/regenerate-summary", async (req, res) => {
   try {
     const result = await pool.query(
@@ -215,8 +215,18 @@ app.post("/recordings/:id/regenerate-summary", async (req, res) => {
       return;
     }
 
+    // Obtener prompt del skill si se especifica
+    let skillPrompt: string | undefined;
+    const skillId = req.body?.skill_id;
+    if (skillId) {
+      const skillResult = await pool.query("SELECT prompt FROM skills WHERE id = $1", [skillId]);
+      if (skillResult.rows.length > 0) {
+        skillPrompt = skillResult.rows[0]["prompt"] as string;
+      }
+    }
+
     const { summarize } = await import("./processor");
-    const summary = await summarize(transcript);
+    const summary = await summarize(transcript, skillPrompt);
 
     await pool.query(
       "UPDATE recordings SET summary = $1 WHERE recording_id = $2",
@@ -226,6 +236,64 @@ app.post("/recordings/:id/regenerate-summary", async (req, res) => {
     res.json({ ok: true, summary });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── Skills / Templates ───────────────────────────────────────────────────────
+
+app.get("/skills", async (_req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM skills ORDER BY is_default DESC, created_at ASC");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post("/skills", async (req, res) => {
+  const { name, description, prompt } = req.body as { name?: string; description?: string; prompt?: string };
+  if (!name?.trim() || !prompt?.trim()) {
+    res.status(400).json({ error: "name y prompt son requeridos" });
+    return;
+  }
+  try {
+    const result = await pool.query(
+      "INSERT INTO skills (name, description, prompt) VALUES ($1, $2, $3) RETURNING *",
+      [name.trim(), description?.trim() ?? null, prompt.trim()]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.put("/skills/:id", async (req, res) => {
+  const { name, description, prompt } = req.body as { name?: string; description?: string; prompt?: string };
+  if (!name?.trim() || !prompt?.trim()) {
+    res.status(400).json({ error: "name y prompt son requeridos" });
+    return;
+  }
+  try {
+    const result = await pool.query(
+      "UPDATE skills SET name=$1, description=$2, prompt=$3 WHERE id=$4 AND is_default=false RETURNING *",
+      [name.trim(), description?.trim() ?? null, prompt.trim(), req.params["id"]]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Skill no encontrado o es un template por defecto" });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.delete("/skills/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM skills WHERE id=$1 AND is_default=false", [req.params["id"]]);
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: String(err) });
   }
 });
@@ -304,6 +372,29 @@ async function main() {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_rec_member_email ON recordings(team_member_email)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_rec_recorded_at  ON recordings(recorded_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id          SERIAL PRIMARY KEY,
+      name        VARCHAR(255) NOT NULL,
+      description VARCHAR(500),
+      prompt      TEXT NOT NULL,
+      is_default  BOOLEAN NOT NULL DEFAULT false,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Skills de ejemplo si la tabla esta vacia
+  const skillCount = await pool.query("SELECT COUNT(*) FROM skills");
+  if (Number(skillCount.rows[0]["count"]) === 0) {
+    await pool.query(`
+      INSERT INTO skills (name, description, prompt, is_default) VALUES
+      ('General', 'Resumen balanceado para cualquier reunion', 'Eres un analista de negocios experto. Resume la reunion de forma clara y estructurada, destacando decisiones, acuerdos y proximos pasos.', true),
+      ('Direccion', 'Enfocado en decisiones estrategicas y KPIs', 'Eres un asesor de alta direccion. Resume enfocandote exclusivamente en decisiones estrategicas, impacto economico, riesgos del negocio y compromisos de liderazgo. Omite detalles operativos menores.'),
+      ('Ventas', 'Seguimiento de oportunidades y clientes', 'Eres un especialista en ventas B2B. Resume destacando: estado de la oportunidad, objeciones del cliente, compromisos del equipo comercial, proximos pasos y probabilidad de cierre.'),
+      ('Tecnico', 'Decisiones de arquitectura y desarrollo', 'Eres un tech lead senior. Resume enfocandote en decisiones tecnicas, deuda tecnica identificada, dependencias criticas, riesgos de implementacion y tareas asignadas al equipo de desarrollo.')
+    `);
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS team_members (

@@ -10,13 +10,14 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
 
-// Plantilla de resumen — puedes personalizarla para tu industria
-const SUMMARY_PROMPT = `Eres un analista experto en reuniones de negocios. Tu trabajo es producir resumenes densos, utiles y accionables — no parafrasis vagas.
+// Estructura del resumen — siempre se aplica
+const SUMMARY_STRUCTURE = `
+Tu trabajo es producir resumenes densos, utiles y accionables — no parafrasis vagas.
 
 Reglas:
 - Usa nombres reales de personas, empresas, sistemas y fechas que aparezcan en la transcripcion
 - Si alguien dijo algo importante, cita sus palabras entre comillas
-- Sé especifico: no escribas "se discutio el proceso" sino "Cristian propuso migrar los datos antes del 30 de junio porque ODU no soporta reportes consolidados"
+- Se especifico: no escribas "se discutio el proceso" sino "Cristian propuso migrar los datos antes del 30 de junio porque ODU no soporta reportes consolidados"
 - Si hay tension, desacuerdo o problema sin resolver, mencionalos explicitamente
 - Los proximos pasos deben tener responsable y fecha si se mencionaron
 
@@ -46,6 +47,16 @@ Genera el resumen en espanol con esta estructura:
 Si un bloque genuinamente no aplica, eliminalo. No escribas "No aplica".
 No agregues introducciones ni conclusiones fuera de la estructura.`;
 
+// Prompt por defecto (sin skill)
+const DEFAULT_PROMPT = `Eres un analista experto en reuniones de negocios.${SUMMARY_STRUCTURE}`;
+
+function buildPrompt(customSkillPrompt?: string): string {
+  if (customSkillPrompt) {
+    return `${customSkillPrompt}${SUMMARY_STRUCTURE}`;
+  }
+  return DEFAULT_PROMPT;
+}
+
 function downloadAudio(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -58,14 +69,15 @@ function downloadAudio(url: string): Promise<Buffer> {
   });
 }
 
-export async function summarize(transcript: string): Promise<string> {
-  // Preferencia: Claude si esta configurado, si no GPT-4o
+export async function summarize(transcript: string, customSkillPrompt?: string): Promise<string> {
+  const prompt = buildPrompt(customSkillPrompt);
+
   if (anthropic) {
     console.log(`  Resumiendo con Claude...`);
     const message = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL ?? "claude-opus-4-6",
       max_tokens: 4096,
-      messages: [{ role: "user", content: `${SUMMARY_PROMPT}\n\n---TRANSCRIPCION---\n${transcript}` }],
+      messages: [{ role: "user", content: `${prompt}\n\n---TRANSCRIPCION---\n${transcript}` }],
     });
     return message.content
       .filter((b) => b.type === "text")
@@ -78,7 +90,7 @@ export async function summarize(transcript: string): Promise<string> {
     model: "gpt-4o",
     max_tokens: 4096,
     messages: [
-      { role: "system", content: SUMMARY_PROMPT },
+      { role: "system", content: prompt },
       { role: "user", content: `---TRANSCRIPCION---\n${transcript}` },
     ],
   });
@@ -101,7 +113,6 @@ export async function processAudio(audioUrl: string, filename: string): Promise<
     file,
     model: "whisper-1",
     response_format: "text",
-    // Sin "language" para auto-detectar el idioma de la reunion
   });
 
   const transcript = typeof transcription === "string"
