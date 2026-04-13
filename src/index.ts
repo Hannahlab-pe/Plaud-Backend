@@ -12,6 +12,24 @@ const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MINUTES ?? 30) * 60 * 
 
 app.use(express.json());
 
+// CORS — permite el frontend en Railway y localhost para desarrollo
+const ALLOWED_ORIGINS = [
+  "https://plaud-frontend-production.up.railway.app",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin ?? "";
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") { res.sendStatus(204); return; }
+  next();
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => {
