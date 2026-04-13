@@ -264,7 +264,29 @@ async function main() {
     process.exit(1);
   }
 
-  // Crear tabla team_members si no existe
+  // Crear tablas si no existen
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recordings (
+      id                   SERIAL PRIMARY KEY,
+      recording_id         VARCHAR(255) NOT NULL,
+      team_member_name     VARCHAR(255) NOT NULL,
+      team_member_email    VARCHAR(255) NOT NULL,
+      device_serial        VARCHAR(255),
+      filename             VARCHAR(500),
+      duration_seconds     INTEGER,
+      recorded_at          TIMESTAMPTZ,
+      keywords             JSONB DEFAULT '[]',
+      transcript           TEXT,
+      summary              TEXT,
+      raw_payload          JSONB,
+      received_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (recording_id, team_member_email)
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rec_member_email ON recordings(team_member_email)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rec_recorded_at  ON recordings(recorded_at DESC)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS team_members (
       id         SERIAL PRIMARY KEY,
