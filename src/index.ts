@@ -390,9 +390,9 @@ async function main() {
     await pool.query(`
       INSERT INTO skills (name, description, prompt, is_default) VALUES
       ('General', 'Resumen balanceado para cualquier reunion', 'Eres un analista de negocios experto. Resume la reunion de forma clara y estructurada, destacando decisiones, acuerdos y proximos pasos.', true),
-      ('Direccion', 'Enfocado en decisiones estrategicas y KPIs', 'Eres un asesor de alta direccion. Resume enfocandote exclusivamente en decisiones estrategicas, impacto economico, riesgos del negocio y compromisos de liderazgo. Omite detalles operativos menores.'),
-      ('Ventas', 'Seguimiento de oportunidades y clientes', 'Eres un especialista en ventas B2B. Resume destacando: estado de la oportunidad, objeciones del cliente, compromisos del equipo comercial, proximos pasos y probabilidad de cierre.'),
-      ('Tecnico', 'Decisiones de arquitectura y desarrollo', 'Eres un tech lead senior. Resume enfocandote en decisiones tecnicas, deuda tecnica identificada, dependencias criticas, riesgos de implementacion y tareas asignadas al equipo de desarrollo.')
+      ('Direccion', 'Enfocado en decisiones estrategicas y KPIs', 'Eres un asesor de alta direccion. Resume enfocandote exclusivamente en decisiones estrategicas, impacto economico, riesgos del negocio y compromisos de liderazgo. Omite detalles operativos menores.', false),
+      ('Ventas', 'Seguimiento de oportunidades y clientes', 'Eres un especialista en ventas B2B. Resume destacando: estado de la oportunidad, objeciones del cliente, compromisos del equipo comercial, proximos pasos y probabilidad de cierre.', false),
+      ('Tecnico', 'Decisiones de arquitectura y desarrollo', 'Eres un tech lead senior. Resume enfocandote en decisiones tecnicas, deuda tecnica identificada, dependencias criticas, riesgos de implementacion y tareas asignadas al equipo de desarrollo.', false)
     `);
   }
 
